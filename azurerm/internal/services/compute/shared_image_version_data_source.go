@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-12-01/compute"
+	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2020-06-01/compute"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/helpers/azure"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/helpers/validate"
@@ -48,6 +48,16 @@ func dataSourceArmSharedImageVersion() *schema.Resource {
 
 			"managed_image_id": {
 				Type:     schema.TypeString,
+				Computed: true,
+			},
+
+			"os_disk_snapshot_id": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+
+			"os_disk_image_size_gb": {
+				Type:     schema.TypeInt,
 				Computed: true,
 			},
 
@@ -113,8 +123,7 @@ func dataSourceArmSharedImageVersionRead(d *schema.ResourceData, meta interface{
 		if profile := props.PublishingProfile; profile != nil {
 			d.Set("exclude_from_latest", profile.ExcludeFromLatest)
 
-			flattenedRegions := flattenSharedImageVersionDataSourceTargetRegions(profile.TargetRegions)
-			if err := d.Set("target_region", flattenedRegions); err != nil {
+			if err := d.Set("target_region", flattenSharedImageVersionDataSourceTargetRegions(profile.TargetRegions)); err != nil {
 				return fmt.Errorf("Error setting `target_region`: %+v", err)
 			}
 		}
@@ -123,6 +132,18 @@ func dataSourceArmSharedImageVersionRead(d *schema.ResourceData, meta interface{
 			if source := profile.Source; source != nil {
 				d.Set("managed_image_id", source.ID)
 			}
+
+			osDiskSnapShotID := ""
+			if profile.OsDiskImage != nil && profile.OsDiskImage.Source != nil && profile.OsDiskImage.Source.ID != nil {
+				osDiskSnapShotID = *profile.OsDiskImage.Source.ID
+			}
+			d.Set("os_disk_snapshot_id", osDiskSnapShotID)
+
+			osDiskImageSize := 0
+			if profile.OsDiskImage != nil && profile.OsDiskImage.SizeInGB != nil {
+				osDiskImageSize = int(*profile.OsDiskImage.SizeInGB)
+			}
+			d.Set("os_disk_image_size_gb", osDiskImageSize)
 		}
 	}
 

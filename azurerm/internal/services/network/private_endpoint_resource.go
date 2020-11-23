@@ -3,16 +3,16 @@ package network
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2020-03-01/network"
+	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2020-05-01/network"
 	"github.com/hashicorp/go-azure-helpers/response"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/helpers/azure"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/helpers/tf"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/clients"
-	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/features"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/services/network/parse"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/tags"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/timeouts"
@@ -217,7 +217,7 @@ func resourceArmPrivateEndpointCreateUpdate(d *schema.ResourceData, meta interfa
 		return fmt.Errorf("validating the configuration for the Private Endpoint %q (Resource Group %q): %+v", name, resourceGroup, err)
 	}
 
-	if features.ShouldResourcesBeImported() && d.IsNewResource() {
+	if d.IsNewResource() {
 		existing, err := client.Get(ctx, resourceGroup, name, "")
 		if err != nil {
 			if !utils.ResponseWasNotFound(existing.Response) {
@@ -249,7 +249,7 @@ func resourceArmPrivateEndpointCreateUpdate(d *schema.ResourceData, meta interfa
 
 	future, err := client.CreateOrUpdate(ctx, resourceGroup, name, parameters)
 	if err != nil {
-		if azure.StringContains(err.Error(), "is missing required parameter 'group Id'") {
+		if strings.EqualFold(err.Error(), "is missing required parameter 'group Id'") {
 			return fmt.Errorf("creating Private Endpoint %q (Resource Group %q) due to missing 'group Id', ensure that the 'subresource_names' type is populated: %+v", name, resourceGroup, err)
 		} else {
 			return fmt.Errorf("creating Private Endpoint %q (Resource Group %q): %+v", name, resourceGroup, err)
@@ -443,7 +443,9 @@ func resourceArmPrivateEndpointDelete(d *schema.ResourceData, meta interface{}) 
 	privateDnsZoneGroup := make(map[string]interface{})
 	if dnsRaw != nil {
 		for _, v := range dnsRaw.([]interface{}) {
-			privateDnsZoneGroup = v.(map[string]interface{})
+			if v != nil {
+				privateDnsZoneGroup = v.(map[string]interface{})
+			}
 		}
 	}
 
@@ -604,7 +606,7 @@ func flattenArmPrivateDnsZoneConfigs(input *[]network.PrivateDNSZoneConfig, zone
 
 		if name := v.Name; name != nil {
 			result["name"] = *name
-			// I have to consturct this because the SDK does not expose it in it's PrivateDNSZoneConfig struct
+			// I have to consturct this because the SDK does not expose it in its PrivateDNSZoneConfig struct
 			result["id"] = fmt.Sprintf("%s/privateDnsZoneConfigs/%s", zoneGroupId, *name)
 		}
 

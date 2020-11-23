@@ -27,7 +27,7 @@ func TestAccAzureRMApiManagementIdentityProviderTwitter_basic(t *testing.T) {
 					testCheckAzureRMApiManagementIdentityProviderTwtterExists(data.ResourceName),
 				),
 			},
-			data.ImportStep(),
+			data.ImportStep("api_secret_key"),
 		},
 	})
 }
@@ -47,18 +47,17 @@ func TestAccAzureRMApiManagementIdentityProviderTwitter_update(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testCheckAzureRMApiManagementIdentityProviderTwtterExists(data.ResourceName),
 					resource.TestCheckResourceAttr(data.ResourceName, "api_key", "00000000000000000000000000000000"),
-					resource.TestCheckResourceAttr(data.ResourceName, "api_secret_key", "00000000000000000000000000000000"),
 				),
 			},
+			data.ImportStep("api_secret_key"),
 			{
 				Config: updateConfig,
 				Check: resource.ComposeTestCheckFunc(
 					testCheckAzureRMApiManagementIdentityProviderTwtterExists(data.ResourceName),
 					resource.TestCheckResourceAttr(data.ResourceName, "api_key", "11111111111111111111111111111111"),
-					resource.TestCheckResourceAttr(data.ResourceName, "api_secret_key", "11111111111111111111111111111111"),
 				),
 			},
-			data.ImportStep(),
+			data.ImportStep("api_secret_key"),
 		},
 	})
 }
@@ -94,7 +93,6 @@ func testCheckAzureRMApiManagementIdentityProviderTwitterDestroy(s *terraform.St
 
 		ctx := acceptance.AzureProvider.Meta().(*clients.Client).StopContext
 		resp, err := client.Get(ctx, resourceGroup, serviceName, apimanagement.Twitter)
-
 		if err != nil {
 			if !utils.ResponseWasNotFound(resp.Response) {
 				return err

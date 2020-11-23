@@ -11,11 +11,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/helpers/azure"
-	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/helpers/suppress"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/helpers/tf"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/clients"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/location"
+	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/services/applicationinsights/parse"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/tags"
+	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/tf/suppress"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/timeouts"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/utils"
 )
@@ -153,7 +154,7 @@ func resourceArmApplicationInsightsWebTestsCreateUpdate(d *schema.ResourceData, 
 		}
 
 		if existing.ID != nil && *existing.ID != "" {
-			return tf.ImportAsExistsError("azurerm_application_insights_web_tests", *existing.ID)
+			return tf.ImportAsExistsError("azurerm_application_insights_web_test", *existing.ID)
 		}
 	}
 
@@ -208,24 +209,21 @@ func resourceArmApplicationInsightsWebTestsRead(d *schema.ResourceData, meta int
 	ctx, cancel := timeouts.ForRead(meta.(*clients.Client).StopContext, d)
 	defer cancel()
 
-	id, err := azure.ParseAzureResourceID(d.Id())
+	id, err := parse.ApplicationInsightsWebTestID(d.Id())
 	if err != nil {
 		return err
 	}
 
 	log.Printf("[DEBUG] Reading AzureRM Application Insights WebTests '%s'", id)
 
-	resGroup := id.ResourceGroup
-	name := id.Path["webtests"]
-
-	resp, err := client.Get(ctx, resGroup, name)
+	resp, err := client.Get(ctx, id.ResourceGroup, id.Name)
 	if err != nil {
 		if utils.ResponseWasNotFound(resp.Response) {
-			log.Printf("[DEBUG] Application Insights WebTest %q was not found in Resource Group %q - removing from state!", name, resGroup)
+			log.Printf("[DEBUG] Application Insights WebTest %q was not found in Resource Group %q - removing from state!", id.Name, id.ResourceGroup)
 			d.SetId("")
 			return nil
 		}
-		return fmt.Errorf("Error retrieving Application Insights WebTests %q (Resource Group %q): %+v", name, resGroup, err)
+		return fmt.Errorf("Error retrieving Application Insights WebTests %q (Resource Group %q): %+v", id.Name, id.ResourceGroup, err)
 	}
 
 	appInsightsId := ""
@@ -236,7 +234,7 @@ func resourceArmApplicationInsightsWebTestsRead(d *schema.ResourceData, meta int
 	}
 	d.Set("application_insights_id", appInsightsId)
 	d.Set("name", resp.Name)
-	d.Set("resource_group_name", resGroup)
+	d.Set("resource_group_name", id.ResourceGroup)
 	d.Set("kind", resp.Kind)
 
 	if location := resp.Location; location != nil {
@@ -244,6 +242,10 @@ func resourceArmApplicationInsightsWebTestsRead(d *schema.ResourceData, meta int
 	}
 
 	if props := resp.WebTestProperties; props != nil {
+		// It is possible that the root level `kind` in response is empty in some cases (see PR #8372 for more info)
+		if resp.Kind == "" {
+			d.Set("kind", props.WebTestKind)
+		}
 		d.Set("synthetic_monitor_id", props.SyntheticMonitorID)
 		d.Set("description", props.Description)
 		d.Set("enabled", props.Enabled)
@@ -268,21 +270,19 @@ func resourceArmApplicationInsightsWebTestsDelete(d *schema.ResourceData, meta i
 	ctx, cancel := timeouts.ForDelete(meta.(*clients.Client).StopContext, d)
 	defer cancel()
 
-	id, err := azure.ParseAzureResourceID(d.Id())
+	id, err := parse.ApplicationInsightsWebTestID(d.Id())
 	if err != nil {
 		return err
 	}
-	resGroup := id.ResourceGroup
-	name := id.Path["webtests"]
 
-	log.Printf("[DEBUG] Deleting AzureRM Application Insights WebTest '%s' (resource group '%s')", name, resGroup)
+	log.Printf("[DEBUG] Deleting AzureRM Application Insights WebTest '%s' (resource group '%s')", id.Name, id.ResourceGroup)
 
-	resp, err := client.Delete(ctx, resGroup, name)
+	resp, err := client.Delete(ctx, id.ResourceGroup, id.Name)
 	if err != nil {
 		if resp.StatusCode == http.StatusNotFound {
 			return nil
 		}
-		return fmt.Errorf("Error issuing AzureRM delete request for Application Insights WebTest '%s': %+v", name, err)
+		return fmt.Errorf("Error issuing AzureRM delete request for Application Insights WebTest '%s': %+v", id.Name, err)
 	}
 
 	return err

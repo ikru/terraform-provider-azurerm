@@ -187,7 +187,7 @@ func TestAccAzureRMDnsARecord_AliasToRecords(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testCheckAzureRMDnsARecordExists(data.ResourceName),
 					resource.TestCheckResourceAttr(data.ResourceName, "records.#", "2"),
-					resource.TestCheckNoResourceAttr(data.ResourceName, "target_resource_id"),
+					resource.TestCheckResourceAttr(data.ResourceName, "target_resource_id", ""),
 				),
 			},
 			data.ImportStep(),
@@ -238,7 +238,6 @@ func testCheckAzureRMDnsARecordDestroy(s *terraform.State) error {
 			return err
 		}
 		resp, err := conn.Get(ctx, id.ResourceGroup, id.ZoneName, id.Name, dns.A)
-
 		if err != nil {
 			if resp.StatusCode == http.StatusNotFound {
 				return nil

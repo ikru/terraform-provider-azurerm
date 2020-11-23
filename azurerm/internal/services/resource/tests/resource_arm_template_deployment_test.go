@@ -167,7 +167,7 @@ func TestAccAzureRMTemplateDeployment_withError(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config:      testAccAzureRMTemplateDeployment_withError(data),
-				ExpectError: regexp.MustCompile("Error validating Template for Deployment"),
+				ExpectError: regexp.MustCompile("Error waiting for deployment"),
 			},
 		},
 	})
@@ -267,7 +267,6 @@ func testCheckAzureRMTemplateDeploymentDestroy(s *terraform.State) error {
 		resourceGroup := rs.Primary.Attributes["resource_group_name"]
 
 		resp, err := client.Get(ctx, resourceGroup, name)
-
 		if err != nil {
 			return nil
 		}

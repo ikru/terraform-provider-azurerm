@@ -96,7 +96,6 @@ func testCheckAzureRMPostgreSQLFirewallRuleDestroy(s *terraform.State) error {
 		resourceGroup := rs.Primary.Attributes["resource_group_name"]
 
 		resp, err := client.Get(ctx, resourceGroup, serverName, name)
-
 		if err != nil {
 			if utils.ResponseWasNotFound(resp.Response) {
 				return nil
@@ -138,7 +137,7 @@ resource "azurerm_postgresql_server" "test" {
   administrator_login          = "acctestun"
   administrator_login_password = "H@Sh1CoR3!"
   version                      = "9.6"
-  ssl_enforcement              = "Enabled"
+  ssl_enforcement_enabled      = true
 }
 
 resource "azurerm_postgresql_firewall_rule" "test" {

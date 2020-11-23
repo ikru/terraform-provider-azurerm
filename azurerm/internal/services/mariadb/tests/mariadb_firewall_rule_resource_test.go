@@ -96,7 +96,6 @@ func testCheckAzureRMMariaDbFirewallRuleDestroy(s *terraform.State) error {
 		resourceGroup := rs.Primary.Attributes["resource_group_name"]
 
 		resp, err := client.Get(ctx, resourceGroup, serverName, name)
-
 		if err != nil {
 			if utils.ResponseWasNotFound(resp.Response) {
 				return nil
@@ -136,7 +135,7 @@ resource "azurerm_mariadb_server" "test" {
   administrator_login          = "acctestun"
   administrator_login_password = "H@Sh1CoR3!"
   version                      = "10.2"
-  ssl_enforcement              = "Enabled"
+  ssl_enforcement_enabled      = true
 }
 
 resource "azurerm_mariadb_firewall_rule" "test" {

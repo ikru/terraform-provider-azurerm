@@ -3,14 +3,15 @@ package eventgrid
 import (
 	"fmt"
 	"log"
+	"regexp"
 	"time"
 
 	"github.com/hashicorp/go-azure-helpers/response"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/helpers/azure"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/helpers/tf"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/clients"
-	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/features"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/services/eventgrid/parse"
 	azSchema "github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/tf/schema"
 	"github.com/terraform-providers/terraform-provider-azurerm/azurerm/internal/timeouts"
@@ -39,12 +40,26 @@ func resourceArmEventGridDomainTopic() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
+				ValidateFunc: validation.All(
+					validation.StringIsNotEmpty,
+					validation.StringMatch(
+						regexp.MustCompile("^[-a-zA-Z0-9]{3,50}$"),
+						"EventGrid domain name must be 3 - 50 characters long, contain only letters, numbers and hyphens.",
+					),
+				),
 			},
 
 			"domain_name": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
+				ValidateFunc: validation.All(
+					validation.StringIsNotEmpty,
+					validation.StringMatch(
+						regexp.MustCompile("^[-a-zA-Z0-9]{3,50}$"),
+						"EventGrid domain name must be 3 - 50 characters long, contain only letters, numbers and hyphens.",
+					),
+				),
 			},
 
 			"resource_group_name": azure.SchemaResourceGroupName(),
@@ -61,7 +76,7 @@ func resourceArmEventGridDomainTopicCreate(d *schema.ResourceData, meta interfac
 	domainName := d.Get("domain_name").(string)
 	resourceGroup := d.Get("resource_group_name").(string)
 
-	if features.ShouldResourcesBeImported() && d.IsNewResource() {
+	if d.IsNewResource() {
 		existing, err := client.Get(ctx, resourceGroup, domainName, name)
 		if err != nil {
 			if !utils.ResponseWasNotFound(existing.Response) {

@@ -3,6 +3,7 @@ package tests
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
@@ -221,6 +222,33 @@ func TestAccAzureRMMsSqlServer_blobAuditingPolicies_withFirewall(t *testing.T) {
 	})
 }
 
+func TestAccAzureRMMsSqlServer_customDiff(t *testing.T) {
+	data := acceptance.BuildTestData(t, "azurerm_mssql_server", "test")
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:     func() { acceptance.PreCheck(t) },
+		Providers:    acceptance.SupportedProviders,
+		CheckDestroy: testCheckAzureRMMsSqlServerDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAzureRMMsSqlServer_basicWithMinimumTLSVersion(data),
+				Check: resource.ComposeTestCheckFunc(
+					testCheckAzureRMMsSqlServerExists(data.ResourceName),
+				),
+			},
+			data.ImportStep("administrator_login_password"),
+			{
+				Config: testAccAzureRMMsSqlServer_basic(data),
+				Check: resource.ComposeTestCheckFunc(
+					testCheckAzureRMMsSqlServerExists(data.ResourceName),
+				),
+				ExpectError: regexp.MustCompile("`minimum_tls_version` cannot be removed once set, please set a valid value for this property"),
+			},
+			data.ImportStep("administrator_login_password"),
+		},
+	})
+}
+
 func testCheckAzureRMMsSqlServerExists(resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		conn := acceptance.AzureProvider.Meta().(*clients.Client).Sql.ServersClient
@@ -263,7 +291,6 @@ func testCheckAzureRMMsSqlServerDestroy(s *terraform.State) error {
 		resourceGroup := rs.Primary.Attributes["resource_group_name"]
 
 		resp, err := conn.Get(ctx, resourceGroup, sqlServerName)
-
 		if err != nil {
 			if utils.ResponseWasNotFound(resp.Response) {
 				return nil
@@ -323,6 +350,29 @@ resource "azurerm_mssql_server" "test" {
 `, data.RandomInteger, data.Locations.Primary, data.RandomInteger)
 }
 
+func testAccAzureRMMsSqlServer_basicWithMinimumTLSVersion(data acceptance.TestData) string {
+	return fmt.Sprintf(`
+provider "azurerm" {
+  features {}
+}
+
+resource "azurerm_resource_group" "test" {
+  name     = "acctestRG-mssql-%d"
+  location = "%s"
+}
+
+resource "azurerm_mssql_server" "test" {
+  name                         = "acctestsqlserver%d"
+  resource_group_name          = azurerm_resource_group.test.name
+  location                     = azurerm_resource_group.test.location
+  version                      = "12.0"
+  administrator_login          = "missadministrator"
+  administrator_login_password = "thisIsKat11"
+  minimum_tls_version          = "1.2"
+}
+`, data.RandomInteger, data.Locations.Primary, data.RandomInteger)
+}
+
 func testAccAzureRMMsSqlServer_requiresImport(data acceptance.TestData) string {
 	return fmt.Sprintf(`
 %s
@@ -349,6 +399,31 @@ resource "azurerm_resource_group" "test" {
   location = "%[2]s"
 }
 
+resource "azurerm_virtual_network" "test" {
+  name                = "acctestvnet-%[1]d"
+  resource_group_name = azurerm_resource_group.test.name
+  location            = azurerm_resource_group.test.location
+  address_space       = ["10.5.0.0/16"]
+}
+
+resource "azurerm_subnet" "service" {
+  name                 = "acctestsnetservice-%[1]d"
+  resource_group_name  = azurerm_resource_group.test.name
+  virtual_network_name = azurerm_virtual_network.test.name
+  address_prefixes     = ["10.5.1.0/24"]
+
+  enforce_private_link_service_network_policies = true
+}
+
+resource "azurerm_subnet" "endpoint" {
+  name                 = "acctestsnetendpoint-%[1]d"
+  resource_group_name  = azurerm_resource_group.test.name
+  virtual_network_name = azurerm_virtual_network.test.name
+  address_prefixes     = ["10.5.2.0/24"]
+
+  enforce_private_link_endpoint_network_policies = true
+}
+
 resource "azurerm_storage_account" "test" {
   name                     = "acctesta%[3]d"
   resource_group_name      = azurerm_resource_group.test.name
@@ -364,8 +439,9 @@ resource "azurerm_mssql_server" "test" {
   version                      = "12.0"
   administrator_login          = "missadministrator"
   administrator_login_password = "thisIsKat11"
+  minimum_tls_version          = "1.2"
 
-  public_network_access_enabled = false
+  public_network_access_enabled = true
 
   extended_auditing_policy {
     storage_account_access_key              = azurerm_storage_account.test.primary_access_key
@@ -377,6 +453,25 @@ resource "azurerm_mssql_server" "test" {
   tags = {
     ENV      = "Staging"
     database = "NotProd"
+  }
+}
+
+resource "azurerm_private_dns_zone" "finance" {
+  name                = "privatelink.sql.database.azure.com"
+  resource_group_name = azurerm_resource_group.test.name
+}
+
+resource "azurerm_private_endpoint" "test" {
+  name                = "acctest-privatelink-%[1]d"
+  location            = azurerm_resource_group.test.location
+  resource_group_name = azurerm_resource_group.test.name
+  subnet_id           = azurerm_subnet.endpoint.id
+
+  private_service_connection {
+    name                           = "acctest-privatelink-mssc-%[1]d"
+    private_connection_resource_id = azurerm_mssql_server.test.id
+    subresource_names              = ["sqlServer"]
+    is_manual_connection           = false
   }
 }
 `, data.RandomInteger, data.Locations.Primary, data.RandomIntOfLength(15))
@@ -391,6 +486,31 @@ provider "azurerm" {
 resource "azurerm_resource_group" "test" {
   name     = "acctestRG-mssql-%[1]d"
   location = "%[2]s"
+}
+
+resource "azurerm_virtual_network" "test" {
+  name                = "acctestvnet-%[1]d"
+  resource_group_name = azurerm_resource_group.test.name
+  location            = azurerm_resource_group.test.location
+  address_space       = ["10.5.0.0/16"]
+}
+
+resource "azurerm_subnet" "service" {
+  name                 = "acctestsnetservice-%[1]d"
+  resource_group_name  = azurerm_resource_group.test.name
+  virtual_network_name = azurerm_virtual_network.test.name
+  address_prefixes     = ["10.5.1.0/24"]
+
+  enforce_private_link_service_network_policies = true
+}
+
+resource "azurerm_subnet" "endpoint" {
+  name                 = "acctestsnetendpoint-%[1]d"
+  resource_group_name  = azurerm_resource_group.test.name
+  virtual_network_name = azurerm_virtual_network.test.name
+  address_prefixes     = ["10.5.2.0/24"]
+
+  enforce_private_link_endpoint_network_policies = true
 }
 
 resource "azurerm_storage_account" "testb" {
@@ -408,6 +528,7 @@ resource "azurerm_mssql_server" "test" {
   version                      = "12.0"
   administrator_login          = "missadministrator"
   administrator_login_password = "thisIsKat11"
+  minimum_tls_version          = "1.0"
 
   public_network_access_enabled = false
 
@@ -420,6 +541,25 @@ resource "azurerm_mssql_server" "test" {
 
   tags = {
     DB = "NotProd"
+  }
+}
+
+resource "azurerm_private_dns_zone" "finance" {
+  name                = "privatelink.sql.database.azure.com"
+  resource_group_name = azurerm_resource_group.test.name
+}
+
+resource "azurerm_private_endpoint" "test" {
+  name                = "acctest-privatelink-%[1]d"
+  location            = azurerm_resource_group.test.location
+  resource_group_name = azurerm_resource_group.test.name
+  subnet_id           = azurerm_subnet.endpoint.id
+
+  private_service_connection {
+    name                           = "acctest-privatelink-mssc-%[1]d"
+    private_connection_resource_id = azurerm_mssql_server.test.id
+    subresource_names              = ["sqlServer"]
+    is_manual_connection           = false
   }
 }
 `, data.RandomInteger, data.Locations.Primary, data.RandomIntOfLength(15))
